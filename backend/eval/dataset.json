@@ -1,0 +1,69 @@
+{
+  "papers": [
+    {"id": "solartrack", "file": "solartrack.pdf", "title": "SolarTrack"},
+    {"id": "packlite", "file": "packlite.pdf", "title": "PackLite"}
+  ],
+  "cases": [
+    {
+      "id": "solartrack-headline-number",
+      "papers": ["solartrack"],
+      "question": "By what percentage does SolarTrack increase daily energy capture compared to fixed-angle panels?",
+      "expected_keyword_groups": [["28%", "twenty eight percent", "28 percent"]],
+      "expected_pages": [1]
+    },
+    {
+      "id": "solartrack-method",
+      "papers": ["solartrack"],
+      "question": "What technique does SolarTrack use to smooth noisy sensor readings?",
+      "expected_keyword_groups": [["kalman filter", "kalman"]],
+      "expected_pages": [2]
+    },
+    {
+      "id": "solartrack-trial-details",
+      "papers": ["solartrack"],
+      "question": "How many rooftop installations were used in SolarTrack's field trials, and over what time period?",
+      "expected_keyword_groups": [["4", "four"], ["three months", "three-month", "3 months"]],
+      "expected_pages": [2]
+    },
+    {
+      "id": "solartrack-unknown",
+      "papers": ["solartrack"],
+      "question": "What operating system does SolarTrack's control software run on?",
+      "expect_unknown": true
+    },
+    {
+      "id": "packlite-headline-number",
+      "papers": ["packlite"],
+      "question": "How much does PackLite reduce checkpoint storage by?",
+      "expected_keyword_groups": [["60%", "sixty percent", "60 percent"]],
+      "expected_pages": [1]
+    },
+    {
+      "id": "packlite-method",
+      "papers": ["packlite"],
+      "question": "What encoding technique does PackLite use to compress checkpoints?",
+      "expected_keyword_groups": [["delta encoding", "sparse delta"]],
+      "expected_pages": [2]
+    },
+    {
+      "id": "packlite-trial-details",
+      "papers": ["packlite"],
+      "question": "How many training runs were used to evaluate PackLite, and what was the absolute storage reduction?",
+      "expected_keyword_groups": [["5", "five"], ["840", "2.1"]],
+      "expected_pages": [2]
+    },
+    {
+      "id": "packlite-unknown",
+      "papers": ["packlite"],
+      "question": "What programming language is PackLite implemented in?",
+      "expect_unknown": true
+    },
+    {
+      "id": "cross-paper-comparison",
+      "papers": ["solartrack", "packlite"],
+      "question": "What percentage improvement does each of these two papers report, and for what?",
+      "expected_keyword_groups": [["28%", "twenty eight"], ["60%", "sixty"]],
+      "expect_both_papers_cited": true
+    }
+  ]
+}
