@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from hashlib import sha256
 from pathlib import Path
 from uuid import uuid4
@@ -14,8 +15,10 @@ from app.models.document_chunk import DocumentChunk
 from app.models.uploaded_paper import UploadedPaper
 from app.models.user import User
 from app.services import faiss_index_service
+from app.utils.time import utc_now
 
 ALLOWED_PDF_MIME_TYPES = {"application/pdf", "application/x-pdf"}
+_UNSAFE_FILENAME_CHARS = re.compile(r'[\\/:*?"<>|\r\n\t]')
 
 
 def get_existing_paper_by_checksum(db: Session, checksum: str) -> UploadedPaper | None:
@@ -23,13 +26,39 @@ def get_existing_paper_by_checksum(db: Session, checksum: str) -> UploadedPaper 
     return db.scalar(statement)
 
 
-def list_user_uploaded_papers(db: Session, current_user: User) -> list[UploadedPaper]:
-    statement = (
-        select(UploadedPaper)
-        .where(UploadedPaper.user_id == current_user.id)
-        .order_by(UploadedPaper.uploaded_at.desc())
-    )
+def list_user_uploaded_papers(
+    db: Session,
+    current_user: User,
+    sort: str = "uploaded_at",
+    limit: int | None = None,
+) -> list[UploadedPaper]:
+    statement = select(UploadedPaper).where(UploadedPaper.user_id == current_user.id)
+
+    if sort == "last_viewed_at":
+        # "Recently viewed" only makes sense for papers that have actually been
+        # opened at least once — a paper sitting at NULL isn't "recent", it's unseen.
+        statement = statement.where(UploadedPaper.last_viewed_at.is_not(None)).order_by(
+            UploadedPaper.last_viewed_at.desc()
+        )
+    else:
+        statement = statement.order_by(UploadedPaper.uploaded_at.desc())
+
+    if limit is not None:
+        statement = statement.limit(limit)
+
     return list(db.scalars(statement))
+
+
+def mark_paper_viewed(db: Session, paper: UploadedPaper) -> UploadedPaper:
+    """Stamps `last_viewed_at` for the "recently viewed" dashboard section. Called
+    only from the explicit "open a paper" route (`GET /papers/{id}`) — not from the
+    shared `get_user_paper_by_id` lookup other services (summary, explain, chat) use
+    internally, so calling those doesn't masquerade as the user viewing the paper.
+    """
+    paper.last_viewed_at = utc_now()
+    db.commit()
+    db.refresh(paper)
+    return paper
 
 
 def get_user_paper_by_id(db: Session, current_user: User, paper_id: int) -> UploadedPaper:
@@ -110,16 +139,28 @@ def delete_uploaded_paper(db: Session, current_user: User, paper_id: int) -> Non
         storage_path.unlink()
 
 
-async def save_uploaded_pdf(
+def _sanitize_filename_component(value: str, fallback: str = "paper") -> str:
+    cleaned = _UNSAFE_FILENAME_CHARS.sub(" ", value).strip()
+    cleaned = " ".join(cleaned.split())
+    return cleaned[:150] or fallback
+
+
+def _persist_new_paper(
     db: Session,
     current_user: User,
-    upload_file: UploadFile,
     settings: Settings,
+    contents: bytes,
+    *,
+    original_filename: str,
+    mime_type: str | None,
+    title: str | None = None,
+    extra_metadata: dict,
 ) -> UploadedPaper:
-    if upload_file.content_type not in ALLOWED_PDF_MIME_TYPES and not (upload_file.filename or "").lower().endswith(".pdf"):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only PDF files are supported")
-
-    contents = await upload_file.read()
+    """Dedupe-by-checksum, size-check, on-disk storage, and `UploadedPaper` row
+    creation shared by both entry points that add a paper to a user's library: a
+    manual upload and a server-side import from an external search result. Neither
+    path should bypass the other's checksum dedupe or size limit.
+    """
     checksum = sha256(contents).hexdigest()
     existing_paper = get_existing_paper_by_checksum(db, checksum)
     if existing_paper is not None:
@@ -132,10 +173,13 @@ async def save_uploaded_pdf(
     if len(contents) > max_size_bytes:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"File '{upload_file.filename}' exceeds the {settings.max_pdf_upload_size_mb} MB limit",
+            detail=f"'{original_filename}' exceeds the {settings.max_pdf_upload_size_mb} MB limit",
         )
 
-    safe_filename = Path(upload_file.filename or "paper.pdf").name
+    safe_filename = Path(_sanitize_filename_component(original_filename, fallback="paper.pdf")).name
+    if not safe_filename.lower().endswith(".pdf"):
+        safe_filename = f"{safe_filename}.pdf"
+
     upload_dir = Path(settings.paper_upload_dir) / f"user-{current_user.id}"
     upload_dir.mkdir(parents=True, exist_ok=True)
 
@@ -143,24 +187,78 @@ async def save_uploaded_pdf(
     storage_path = upload_dir / storage_filename
     storage_path.write_bytes(contents)
 
-    title = Path(safe_filename).stem.replace("_", " ").replace("-", " ").strip() or "Untitled paper"
+    resolved_title = (
+        title.strip()[:255]
+        if title and title.strip()
+        else (Path(safe_filename).stem.replace("_", " ").replace("-", " ").strip() or "Untitled paper")
+    )
 
     paper = UploadedPaper(
         user_id=current_user.id,
-        title=title,
+        title=resolved_title,
         original_filename=safe_filename,
         storage_path=str(storage_path),
-        mime_type=upload_file.content_type,
+        mime_type=mime_type,
         file_size_bytes=len(contents),
         checksum_sha256=checksum,
         processing_status="uploaded",
-        paper_metadata={
-            "source": "pdf-upload",
-            "upload_dir": str(upload_dir),
-        },
+        paper_metadata={"upload_dir": str(upload_dir), **extra_metadata},
     )
 
     db.add(paper)
     db.commit()
     db.refresh(paper)
     return paper
+
+
+async def save_uploaded_pdf(
+    db: Session,
+    current_user: User,
+    upload_file: UploadFile,
+    settings: Settings,
+) -> UploadedPaper:
+    if upload_file.content_type not in ALLOWED_PDF_MIME_TYPES and not (upload_file.filename or "").lower().endswith(".pdf"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only PDF files are supported")
+
+    contents = await upload_file.read()
+    return _persist_new_paper(
+        db,
+        current_user,
+        settings,
+        contents,
+        original_filename=upload_file.filename or "paper.pdf",
+        mime_type=upload_file.content_type,
+        extra_metadata={"source": "pdf-upload"},
+    )
+
+
+def save_imported_pdf(
+    db: Session,
+    current_user: User,
+    settings: Settings,
+    contents: bytes,
+    *,
+    title: str,
+    source: str,
+    external_id: str,
+    external_url: str | None,
+) -> UploadedPaper:
+    """Persists a PDF downloaded server-side from an external search result (arXiv /
+    Semantic Scholar) through the identical dedupe/size/storage path a manual upload
+    goes through, so it enters the same chunk -> embed -> ready pipeline without any
+    duplicated logic.
+    """
+    return _persist_new_paper(
+        db,
+        current_user,
+        settings,
+        contents,
+        original_filename=f"{title or external_id}.pdf",
+        mime_type="application/pdf",
+        title=title,
+        extra_metadata={
+            "source": f"{source}-import",
+            "external_id": external_id,
+            "external_url": external_url,
+        },
+    )

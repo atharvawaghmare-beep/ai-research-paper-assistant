@@ -30,6 +30,12 @@ export default function AppLayout() {
                 <NavLink className={navLinkClass} to="/dashboard">
                   Dashboard
                 </NavLink>
+                <NavLink className={navLinkClass} to="/discover">
+                  Discover
+                </NavLink>
+                <NavLink className={navLinkClass} to="/compare">
+                  Compare
+                </NavLink>
                 <button
                   type="button"
                   onClick={() => {

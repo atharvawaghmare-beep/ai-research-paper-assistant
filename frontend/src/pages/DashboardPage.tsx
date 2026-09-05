@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import AnalyticsPanel from '../components/AnalyticsPanel';
 import PdfUploadDropzone from '../components/PdfUploadDropzone';
 import { deletePaperApi, listUploadedPapersApi, type UploadedPaper } from '../lib/auth';
 
@@ -38,11 +39,25 @@ function formatSize(bytes: number | null): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+const RECENTLY_VIEWED_LIMIT = 5;
+
+function timeAgo(isoString: string): string {
+  const seconds = Math.max(0, (Date.now() - new Date(isoString).getTime()) / 1000);
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
 export default function DashboardPage() {
   const { token, user } = useAuth();
   const [uploadedPapers, setUploadedPapers] = useState<UploadedPaper[]>([]);
   const [loadingPapers, setLoadingPapers] = useState(true);
   const [papersError, setPapersError] = useState('');
+  const [recentlyViewed, setRecentlyViewed] = useState<UploadedPaper[]>([]);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [deleteError, setDeleteError] = useState('');
@@ -58,8 +73,12 @@ export default function DashboardPage() {
     setPapersError('');
 
     try {
-      const papers = await listUploadedPapersApi(token);
+      const [papers, recent] = await Promise.all([
+        listUploadedPapersApi(token),
+        listUploadedPapersApi(token, { sort: 'last_viewed_at', limit: RECENTLY_VIEWED_LIMIT }),
+      ]);
       setUploadedPapers(papers);
+      setRecentlyViewed(recent);
     } catch (error) {
       setPapersError(error instanceof Error ? error.message : 'Unable to load uploaded PDFs');
     } finally {
@@ -117,6 +136,26 @@ export default function DashboardPage() {
       </header>
 
       <PdfUploadDropzone onUploaded={() => void refreshPapers()} />
+
+      {recentlyViewed.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold text-slate-900">Recently viewed</h2>
+          <div className="flex gap-3 overflow-x-auto pb-1">
+            {recentlyViewed.map((paper) => (
+              <Link
+                key={paper.id}
+                to={`/papers/${paper.id}`}
+                className="w-56 shrink-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-card transition hover:border-brand-300 hover:shadow-md"
+              >
+                <p className="truncate text-sm font-medium text-slate-900">{paper.title}</p>
+                <p className="mt-1 text-xs text-slate-400">
+                  Viewed {paper.last_viewed_at ? timeAgo(paper.last_viewed_at) : 'recently'}
+                </p>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="space-y-4">
         <div className="flex items-center justify-between">
@@ -192,6 +231,8 @@ export default function DashboardPage() {
           )}
         </div>
       </section>
+
+      <AnalyticsPanel />
     </section>
   );
 }

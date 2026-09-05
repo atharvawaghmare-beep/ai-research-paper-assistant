@@ -1,7 +1,9 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import ProtectedRoute from './components/ProtectedRoute';
+import ComparePage from './pages/ComparePage';
 import DashboardPage from './pages/DashboardPage';
 import AppLayout from './layouts/AppLayout';
+import DiscoverPage from './pages/DiscoverPage';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import PaperDetailPage from './pages/PaperDetailPage';
@@ -18,6 +20,8 @@ export default function App() {
         <Route path="start" element={<Navigate to="/" replace />} />
         <Route element={<ProtectedRoute />}>
           <Route path="dashboard" element={<DashboardPage />} />
+          <Route path="discover" element={<DiscoverPage />} />
+          <Route path="compare" element={<ComparePage />} />
           <Route path="papers/:paperId" element={<PaperDetailPage />} />
         </Route>
         <Route path="*" element={<NotFoundPage />} />

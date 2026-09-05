@@ -28,6 +28,8 @@ export type UploadedPaper = {
   paper_metadata: Record<string, unknown> | null;
   uploaded_at: string;
   processed_at: string | null;
+  summary_generated_at: string | null;
+  last_viewed_at: string | null;
 };
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1';
@@ -100,8 +102,16 @@ export async function logoutApi(token: string): Promise<void> {
   });
 }
 
-export async function listUploadedPapersApi(token: string): Promise<UploadedPaper[]> {
-  const response = await fetch(`${apiBaseUrl}/papers/`, {
+export async function listUploadedPapersApi(
+  token: string,
+  options?: { sort?: 'uploaded_at' | 'last_viewed_at'; limit?: number },
+): Promise<UploadedPaper[]> {
+  const params = new URLSearchParams();
+  if (options?.sort) params.set('sort', options.sort);
+  if (options?.limit) params.set('limit', String(options.limit));
+  const query = params.toString();
+
+  const response = await fetch(`${apiBaseUrl}/papers/${query ? `?${query}` : ''}`, {
     headers: {
       Authorization: `Bearer ${token}`,
     },

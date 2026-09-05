@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "llama3.2:3b"
     llm_request_timeout_seconds: int = 300
+    arxiv_api_base_url: str = "https://export.arxiv.org/api/query"
+    semantic_scholar_api_base_url: str = "https://api.semanticscholar.org/graph/v1"
+    semantic_scholar_api_key: str | None = None
+    external_api_timeout_seconds: float = 15.0
+    external_api_max_retries: int = 2
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

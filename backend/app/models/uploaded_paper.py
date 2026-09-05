@@ -28,6 +28,7 @@ class UploadedPaper(Base):
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     summary_generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_viewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
 
     user: Mapped[User] = relationship(back_populates="uploaded_papers")
     chunks: Mapped[list[DocumentChunk]] = relationship(
@@ -35,4 +36,14 @@ class UploadedPaper(Base):
         cascade="all, delete-orphan",
         order_by="DocumentChunk.chunk_index",
     )
-    chat_sessions: Mapped[list[ChatSession]] = relationship(back_populates="paper", cascade="all, delete-orphan")
+    # No delete cascade here: this is the *anchor* relationship only (a session's
+    # `paper_id`, matching the /papers/{id}/chat URL it was created under) — a
+    # session can also be linked to other papers via `chat_session_papers` (Phase 4
+    # multi-paper Q&A) that have nothing to do with this one being deleted. The FK
+    # itself is `ondelete="SET NULL"` (see ChatSession.paper_id): deleting a paper
+    # should just null out its anchor on any session, never delete the session,
+    # since destroying it would also destroy messages that may cite other, still-
+    # very-much-alive papers. An ORM-level delete cascade here previously
+    # pre-empted that FK behavior and deleted the whole session instead — see
+    # CLAUDE.md's "Known bug" note for how this was found.
+    chat_sessions: Mapped[list[ChatSession]] = relationship(back_populates="paper")
