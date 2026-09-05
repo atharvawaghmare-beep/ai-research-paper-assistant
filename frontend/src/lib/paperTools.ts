@@ -1,9 +1,21 @@
+import type { UploadedPaper } from './auth';
 import type { Citation } from './chat';
 
 export type PaperSummaryResponse = {
   summary: string;
   cached: boolean;
   generated_at: string | null;
+};
+
+export type PaperCompareEntry = {
+  paper: UploadedPaper;
+  summary: string;
+  cached: boolean;
+  generated_at: string | null;
+};
+
+export type PaperCompareResponse = {
+  papers: PaperCompareEntry[];
 };
 
 export type Difficulty = 'beginner' | 'intermediate' | 'expert';
@@ -54,4 +66,10 @@ export async function explainConceptApi(
     method: 'POST',
     body: JSON.stringify({ term, difficulty }),
   });
+}
+
+export async function comparePapersApi(token: string, paperIds: number[]): Promise<PaperCompareResponse> {
+  const params = new URLSearchParams();
+  paperIds.forEach((id) => params.append('paper_ids', String(id)));
+  return requestJson<PaperCompareResponse>(`/papers/compare?${params.toString()}`, token);
 }

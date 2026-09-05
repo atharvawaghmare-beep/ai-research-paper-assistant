@@ -7,7 +7,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.config.settings import get_settings
 from app.rate_limit import limiter
-from app.routers import auth_router, chat_router, health_router, papers_router, users_router
+from app.routers import analytics_router, auth_router, chat_router, health_router, papers_router, users_router
 
 # Schema management lives in Alembic now (see backend/alembic/), not here.
 # Run `alembic upgrade head` before starting the app.
@@ -40,6 +40,7 @@ app.include_router(auth_router, prefix=settings.api_prefix, tags=["auth"])
 app.include_router(papers_router, prefix=settings.api_prefix, tags=["papers"])
 app.include_router(chat_router, prefix=settings.api_prefix, tags=["chat"])
 app.include_router(users_router, prefix=settings.api_prefix, tags=["users"])
+app.include_router(analytics_router, prefix=settings.api_prefix, tags=["analytics"])
 
 
 @app.get("/")

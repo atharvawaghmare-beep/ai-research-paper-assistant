@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import CitationList from '../components/CitationList';
+import CitationsPanel from '../components/CitationsPanel';
 import ComparePapersPicker from '../components/ComparePapersPicker';
 import ConceptExplainPanel from '../components/ConceptExplainPanel';
 import SummaryPanel from '../components/SummaryPanel';
@@ -26,6 +27,7 @@ const TABS = [
   { value: 'chat', label: 'Chat' },
   { value: 'summary', label: 'Summary' },
   { value: 'explain', label: 'Explain a concept' },
+  { value: 'citations', label: 'Citations' },
 ] as const;
 
 type Tab = (typeof TABS)[number]['value'];
@@ -393,6 +395,10 @@ export default function PaperDetailPage() {
 
         {activeTab === 'explain' && paperId && (
           <ConceptExplainPanel paperId={paperId} isPaperReady={Boolean(isPaperReady)} />
+        )}
+
+        {activeTab === 'citations' && paperId && (
+          <CitationsPanel paperId={paperId} isPaperReady={Boolean(isPaperReady)} />
         )}
       </div>
     </section>
