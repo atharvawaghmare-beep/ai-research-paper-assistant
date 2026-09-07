@@ -2,7 +2,6 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import CitationList from '../components/CitationList';
 import CitationsPanel from '../components/CitationsPanel';
-import ComparePapersPicker from '../components/ComparePapersPicker';
 import ConceptExplainPanel from '../components/ConceptExplainPanel';
 import SummaryPanel from '../components/SummaryPanel';
 import { useAuth } from '../context/AuthContext';
@@ -51,7 +50,6 @@ export default function PaperDetailPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [sessionPapers, setSessionPapers] = useState<UploadedPaper[]>([]);
-  const [comparisonPaperIds, setComparisonPaperIds] = useState<number[]>([]);
 
   const [inputValue, setInputValue] = useState('');
   const [sending, setSending] = useState(false);
@@ -155,7 +153,7 @@ export default function PaperDetailPage() {
     const isNewSession = sessionId === null;
 
     try {
-      const result = await sendChatMessageApi(token, paperId, question, sessionId, comparisonPaperIds);
+      const result = await sendChatMessageApi(token, paperId, question, sessionId);
       setSessionId(result.session_id);
       setMessages((current) => [
         ...current.filter((message) => message.id !== optimisticMessage.id),
@@ -164,9 +162,9 @@ export default function PaperDetailPage() {
       ]);
 
       // The turn response doesn't carry the session's paper list — only relevant
-      // the first time, when the picker's selection just became a real session.
+      // the first time a session is created, so the "Comparing N papers" banner
+      // (still shown for sessions started via the /compare page) has data.
       if (isNewSession) {
-        setComparisonPaperIds([]);
         try {
           const full = await getChatSessionApi(token, paperId, result.session_id);
           setSessionPapers(full.papers);
@@ -275,14 +273,6 @@ export default function PaperDetailPage() {
       <div className="flex flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card">
         {activeTab === 'chat' && (
           <>
-            {sessionId === null && messages.length === 0 && isPaperReady && paperId && (
-              <ComparePapersPicker
-                currentPaperId={paperId}
-                selectedPaperIds={comparisonPaperIds}
-                onChange={setComparisonPaperIds}
-              />
-            )}
-
             {sessionPapers.length > 1 && (
               <div className="border-b border-slate-200 px-5 py-3">
                 <p className="mb-2 text-xs font-medium uppercase tracking-[0.1em] text-slate-500">
