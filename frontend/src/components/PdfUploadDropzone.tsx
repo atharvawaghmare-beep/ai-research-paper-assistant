@@ -185,7 +185,6 @@ export default function PdfUploadDropzone({ onUploaded }: PdfUploadDropzoneProps
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="space-y-1">
           <h3 className="text-lg font-semibold text-slate-900">Upload a paper</h3>
-          <p className="max-w-2xl text-sm text-slate-500">Drop one or more PDFs — each is validated and uploaded with progress feedback.</p>
         </div>
 
         {queueSummary.total > 0 && (
@@ -230,7 +229,6 @@ export default function PdfUploadDropzone({ onUploaded }: PdfUploadDropzoneProps
         <div className="flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-sm font-medium text-slate-800">Drag and drop PDFs here</p>
-            <p className="mt-1 text-sm text-slate-500">Supports multiple files, up to {MAX_FILE_SIZE_MB} MB each.</p>
           </div>
 
           <div className="flex flex-wrap gap-2">

@@ -203,11 +203,7 @@ export default function ComparePage() {
             </div>
 
             <div className="max-h-96 overflow-y-auto px-5 py-6">
-              {messages.length === 0 ? (
-                <p className="text-center text-sm text-slate-500">
-                  e.g. "What datasets does each paper evaluate on?" or "How do their approaches differ?"
-                </p>
-              ) : (
+              {messages.length === 0 ? null : (
                 <div className="space-y-4">
                   {messages.map((message) => (
                     <div key={message.id} className={message.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>

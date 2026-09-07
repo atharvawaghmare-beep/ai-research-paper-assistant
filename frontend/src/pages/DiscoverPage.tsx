@@ -84,10 +84,6 @@ export default function DiscoverPage() {
     <section className="space-y-8">
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold text-slate-900">Discover papers</h1>
-        <p className="text-sm text-slate-500">
-          Search arXiv and Semantic Scholar by title or keyword, then add a result straight to your library — no
-          manual download required.
-        </p>
       </header>
 
       <form onSubmit={(event) => void handleSearch(event)} className="flex flex-col gap-3 sm:flex-row">
