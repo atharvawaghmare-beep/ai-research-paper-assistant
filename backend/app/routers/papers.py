@@ -23,7 +23,7 @@ from app.schemas.paper import (
     UploadedPaperRead,
 )
 from app.services import citation_graph_service, concept_service, external_paper_service, summary_service
-from app.services.external_paper_service import ExternalPaperError
+from app.services.external_paper_service import ARXIV_CATEGORIES, ExternalPaperError
 from app.services.paper_service import (
     delete_uploaded_paper,
     extract_pdf_page_text,
@@ -70,17 +70,37 @@ def list_papers(
 @limiter.limit("20/minute")
 def search_external_papers(
     request: Request,
-    q: str,
+    q: str | None = None,
+    category: list[str] = Query(default=[]),
+    sort: Literal["relevance", "recent"] = "relevance",
     limit: int = 10,
     current_user: User = Depends(get_current_user),
 ) -> PaperSearchResponse:
-    query = q.strip()
-    if not query:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Search query must not be empty")
+    query = (q or "").strip() or None
+    unknown_categories = [c for c in category if c not in ARXIV_CATEGORIES]
+    if unknown_categories:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown category: {', '.join(unknown_categories)}",
+        )
+    if not query and not category:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provide a search query, select a category, or both",
+        )
 
     bounded_limit = max(1, min(limit, 25))
-    results, warnings = external_paper_service.search_papers(query, bounded_limit, settings)
-    return PaperSearchResponse(query=query, results=results, warnings=warnings)
+    results, warnings = external_paper_service.search_papers(
+        query, bounded_limit, settings, categories=category or None, sort=sort
+    )
+    return PaperSearchResponse(query=query or "", results=results, warnings=warnings)
+
+
+@router.get("/categories", response_model=dict[str, str])
+def list_discover_categories() -> dict[str, str]:
+    """The curated arXiv category whitelist the /search category filter accepts —
+    exposed so the frontend doesn't hardcode a second copy of this list."""
+    return ARXIV_CATEGORIES
 
 
 @router.post("/import", response_model=UploadedPaperRead, status_code=status.HTTP_201_CREATED)

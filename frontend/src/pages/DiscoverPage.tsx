@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
+  getDiscoverCategoriesApi,
   importExternalPaperApi,
   searchExternalPapersApi,
   type ExternalPaperResult,
@@ -26,6 +27,8 @@ function truncate(text: string, maxLength: number): string {
 export default function DiscoverPage() {
   const { token } = useAuth();
   const [query, setQuery] = useState('');
+  const [categories, setCategories] = useState<Record<string, string>>({});
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
   const [warnings, setWarnings] = useState<string[]>([]);
@@ -34,13 +37,20 @@ export default function DiscoverPage() {
   const [importStates, setImportStates] = useState<Record<string, ImportState>>({});
   const [importErrors, setImportErrors] = useState<Record<string, string>>({});
 
-  async function handleSearch(event: React.FormEvent) {
-    event.preventDefault();
+  useEffect(() => {
     if (!token) return;
+    getDiscoverCategoriesApi(token)
+      .then(setCategories)
+      .catch(() => {
+        // Category filtering just won't be offered — keyword search still works.
+      });
+  }, [token]);
 
-    const trimmed = query.trim();
-    if (!trimmed) {
-      setSearchError('Enter a title or keyword to search.');
+  async function performSearch() {
+    if (!token) return;
+    const trimmedQuery = query.trim();
+    if (!trimmedQuery && selectedCategories.length === 0) {
+      setSearchError('Enter a keyword or select a category.');
       return;
     }
 
@@ -49,7 +59,13 @@ export default function DiscoverPage() {
     setWarnings([]);
 
     try {
-      const response = await searchExternalPapersApi(token, trimmed);
+      const response = await searchExternalPapersApi(token, {
+        query: trimmedQuery || undefined,
+        categories: selectedCategories,
+        // No keyword means "browse" rather than "search" — recency is the more
+        // useful default than relevance when there's nothing to rank against.
+        sort: trimmedQuery ? 'relevance' : 'recent',
+      });
       setResults(response.results);
       setWarnings(response.warnings);
       setHasSearched(true);
@@ -60,6 +76,27 @@ export default function DiscoverPage() {
       setIsSearching(false);
     }
   }
+
+  function handleSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    void performSearch();
+  }
+
+  function toggleCategory(code: string) {
+    setSelectedCategories((current) =>
+      current.includes(code) ? current.filter((existing) => existing !== code) : [...current, code],
+    );
+  }
+
+  // Selecting/deselecting a category with no keyword typed should immediately
+  // show results ("recent robotics papers" with no keyword is a valid,
+  // expected action) — combining a category with a keyword still waits for an
+  // explicit Search so typing doesn't trigger a request per keystroke.
+  useEffect(() => {
+    if (!token || query.trim() || selectedCategories.length === 0) return;
+    void performSearch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCategories, token]);
 
   async function handleImport(paper: ExternalPaperResult) {
     if (!token) return;
@@ -86,12 +123,12 @@ export default function DiscoverPage() {
         <h1 className="text-2xl font-semibold text-slate-900">Discover papers</h1>
       </header>
 
-      <form onSubmit={(event) => void handleSearch(event)} className="flex flex-col gap-3 sm:flex-row">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-3 sm:flex-row">
         <input
           type="text"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="e.g. retrieval augmented generation"
+          placeholder="e.g. retrieval augmented generation (optional if you pick a category below)"
           className="flex-1 rounded-xl border border-slate-300 px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
         />
         <button
@@ -102,6 +139,30 @@ export default function DiscoverPage() {
           {isSearching ? 'Searching...' : 'Search'}
         </button>
       </form>
+
+      {Object.keys(categories).length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium uppercase tracking-[0.1em] text-slate-400">Category</span>
+          {Object.entries(categories).map(([code, label]) => {
+            const isSelected = selectedCategories.includes(code);
+            return (
+              <button
+                key={code}
+                type="button"
+                onClick={() => toggleCategory(code)}
+                className={[
+                  'rounded-full border px-3 py-1.5 text-xs font-medium transition',
+                  isSelected
+                    ? 'border-brand-600 bg-brand-600 text-white'
+                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50',
+                ].join(' ')}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {searchError && (
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm text-rose-700">{searchError}</div>
@@ -133,6 +194,14 @@ export default function DiscoverPage() {
                       {SOURCE_LABELS[paper.source]}
                     </span>
                     {paper.year && <span className="text-xs text-slate-400">{paper.year}</span>}
+                    {paper.categories.map((category) => (
+                      <span
+                        key={category}
+                        className="rounded-full border border-brand-100 bg-brand-50 px-2 py-0.5 text-[11px] font-medium text-brand-700"
+                      >
+                        {category}
+                      </span>
+                    ))}
                   </div>
                   <h3 className="mt-1.5 text-base font-semibold text-slate-900">{paper.title}</h3>
                   {paper.authors.length > 0 && (

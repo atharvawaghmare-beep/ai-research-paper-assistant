@@ -82,6 +82,13 @@ class ExternalPaperResult(BaseModel):
         "citation-graph entries (references/citing papers/related suggestions) — "
         "plain arXiv/Semantic Scholar search results don't carry this.",
     )
+    categories: list[str] = Field(
+        default_factory=list,
+        description="Topic labels for this result: real arXiv category codes "
+        "(e.g. 'cs.LG') for arXiv results, or Semantic Scholar's own "
+        "field-of-study strings for Semantic Scholar results — display-only "
+        "badges, not a taxonomy unified across both sources.",
+    )
 
 
 class PaperSearchResponse(BaseModel):
