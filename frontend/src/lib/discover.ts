@@ -13,6 +13,7 @@ export type ExternalPaperResult = {
   external_url: string | null;
   importable: boolean;
   citation_count: number | null;
+  categories: string[];
 };
 
 export type PaperSearchResponse = {
@@ -53,9 +54,23 @@ async function requestJson<T>(path: string, token: string, options?: RequestInit
   return response.json() as Promise<T>;
 }
 
-export async function searchExternalPapersApi(token: string, query: string, limit = 10): Promise<PaperSearchResponse> {
-  const params = new URLSearchParams({ q: query, limit: String(limit) });
+export type DiscoverSort = 'relevance' | 'recent';
+
+export async function searchExternalPapersApi(
+  token: string,
+  options: { query?: string; categories?: string[]; sort?: DiscoverSort; limit?: number },
+): Promise<PaperSearchResponse> {
+  const params = new URLSearchParams();
+  if (options.query) params.set('q', options.query);
+  if (options.sort) params.set('sort', options.sort);
+  params.set('limit', String(options.limit ?? 10));
+  (options.categories ?? []).forEach((category) => params.append('category', category));
+
   return requestJson<PaperSearchResponse>(`/papers/search?${params.toString()}`, token);
+}
+
+export async function getDiscoverCategoriesApi(token: string): Promise<Record<string, string>> {
+  return requestJson<Record<string, string>>('/papers/categories', token);
 }
 
 export async function importExternalPaperApi(token: string, paper: ExternalPaperResult): Promise<UploadedPaper> {

@@ -13,6 +13,23 @@ logger = logging.getLogger("app.external_papers")
 
 _ATOM_NS = "{http://www.w3.org/2005/Atom}"
 
+# A curated subset of arXiv's category taxonomy, scoped to what this app's
+# audience (AI/ML paper research) actually browses — arXiv has 150+ categories
+# across every field of science, and exposing all of them would make the filter
+# control useless. These are real arXiv category codes, not invented tags: they
+# drive the actual `cat:` query term, not just a display label.
+ARXIV_CATEGORIES: dict[str, str] = {
+    "cs.LG": "Machine Learning",
+    "cs.AI": "Artificial Intelligence",
+    "cs.CV": "Computer Vision",
+    "cs.CL": "Computation and Language (NLP)",
+    "cs.RO": "Robotics",
+    "cs.NE": "Neural and Evolutionary Computing",
+    "cs.IR": "Information Retrieval",
+    "cs.CR": "Cryptography and Security",
+    "stat.ML": "Statistics - Machine Learning",
+}
+
 
 class ExternalPaperError(RuntimeError):
     """Raised when an external paper-search/download call fails after retries, or a
@@ -83,14 +100,47 @@ def _backoff_and_log(url: str, attempt: int, max_retries: int, error: Exception)
     time.sleep(backoff_seconds)
 
 
-def search_arxiv(query: str, limit: int, settings: Settings) -> list[ExternalPaperResult]:
+def _build_arxiv_search_query(query: str | None, categories: list[str] | None) -> str:
+    """Combines a free-text keyword and one or more arXiv category filters into
+    arXiv's `search_query` syntax: categories OR'd together, AND'd with the
+    keyword when both are present. At least one of the two must be given —
+    callers (search_papers / the router) validate that before calling in.
+    """
+    terms = []
+    if categories:
+        category_clause = " OR ".join(f"cat:{category}" for category in categories)
+        terms.append(f"({category_clause})" if len(categories) > 1 else category_clause)
+    if query:
+        terms.append(f"all:{query}")
+    return " AND ".join(terms)
+
+
+def search_arxiv(
+    query: str | None,
+    limit: int,
+    settings: Settings,
+    *,
+    categories: list[str] | None = None,
+    sort: str = "relevance",
+) -> list[ExternalPaperResult]:
+    params = {
+        "search_query": _build_arxiv_search_query(query, categories),
+        "start": 0,
+        "max_results": limit,
+    }
+    if sort == "recent":
+        # arXiv's own submission-date sort — this is what makes "recent papers in
+        # a category, no keyword" a real query rather than an approximation.
+        params["sortBy"] = "submittedDate"
+        params["sortOrder"] = "descending"
+
     with httpx.Client(timeout=settings.external_api_timeout_seconds, follow_redirects=True) as client:
         response = _request_with_retry(
             client,
             "GET",
             settings.arxiv_api_base_url,
             max_retries=settings.external_api_max_retries,
-            params={"search_query": f"all:{query}", "start": 0, "max_results": limit},
+            params=params,
         )
 
     try:
@@ -114,6 +164,9 @@ def search_arxiv(query: str, limit: int, settings: Settings) -> list[ExternalPap
             for author in entry.findall(f"{_ATOM_NS}author")
             if (name := (author.findtext(f"{_ATOM_NS}name") or "").strip())
         ]
+        entry_categories = [
+            term for category in entry.findall(f"{_ATOM_NS}category") if (term := category.get("term"))
+        ]
 
         pdf_url = next(
             (link.get("href") for link in entry.findall(f"{_ATOM_NS}link") if link.get("type") == "application/pdf"),
@@ -133,6 +186,7 @@ def search_arxiv(query: str, limit: int, settings: Settings) -> list[ExternalPap
                 pdf_url=pdf_url,
                 external_url=raw_id or None,
                 importable=True,
+                categories=entry_categories,
             )
         )
     return results
@@ -149,7 +203,7 @@ def search_semantic_scholar(query: str, limit: int, settings: Settings) -> list[
             params={
                 "query": query,
                 "limit": limit,
-                "fields": "title,abstract,authors,year,externalIds,openAccessPdf,url",
+                "fields": "title,abstract,authors,year,externalIds,openAccessPdf,url,fieldsOfStudy",
             },
             headers=headers,
         )
@@ -180,6 +234,9 @@ def search_semantic_scholar(query: str, limit: int, settings: Settings) -> list[
                 pdf_url=pdf_url,
                 external_url=item.get("url"),
                 importable=pdf_url is not None,
+                # Not the arXiv taxonomy driving the actual filter — just Semantic
+                # Scholar's own field-of-study labels, shown as a secondary badge.
+                categories=item.get("fieldsOfStudy") or [],
             )
         )
     return results
@@ -288,32 +345,40 @@ def fetch_semantic_scholar_paper_graph(
 
 
 def search_papers(
-    query: str,
+    query: str | None,
     limit: int = 10,
     settings: Settings | None = None,
+    *,
+    categories: list[str] | None = None,
+    sort: str = "relevance",
 ) -> tuple[list[ExternalPaperResult], list[str]]:
-    """Queries arXiv and Semantic Scholar for `query` and merges the results.
+    """Queries arXiv (keyword and/or category, optionally sorted by recency) and
+    Semantic Scholar (keyword only — it has no query-less category browse at this
+    API tier) and merges the results.
 
     Each provider is isolated in its own try/except: one being down, rate-limited,
     or timing out doesn't take out the whole search — the caller gets whatever
     results the other provider returned, plus a warning describing what was
-    skipped, instead of a 500.
+    skipped, instead of a 500. Semantic Scholar is skipped (not "failed") when
+    there's no keyword to search it with — that's an expected omission for
+    category-only browsing, not a warning-worthy problem.
     """
     settings = settings or get_settings()
     results: list[ExternalPaperResult] = []
     warnings: list[str] = []
 
     try:
-        results.extend(search_arxiv(query, limit, settings))
+        results.extend(search_arxiv(query, limit, settings, categories=categories, sort=sort))
     except ExternalPaperError as error:
-        logger.warning("arxiv_search_failed query=%r error=%s", query, error)
+        logger.warning("arxiv_search_failed query=%r categories=%r error=%s", query, categories, error)
         warnings.append(f"arXiv search unavailable: {error}")
 
-    try:
-        results.extend(search_semantic_scholar(query, limit, settings))
-    except ExternalPaperError as error:
-        logger.warning("semantic_scholar_search_failed query=%r error=%s", query, error)
-        warnings.append(f"Semantic Scholar search unavailable: {error}")
+    if query:
+        try:
+            results.extend(search_semantic_scholar(query, limit, settings))
+        except ExternalPaperError as error:
+            logger.warning("semantic_scholar_search_failed query=%r error=%s", query, error)
+            warnings.append(f"Semantic Scholar search unavailable: {error}")
 
     if not results and not warnings:
         warnings.append("No results found for that search.")
