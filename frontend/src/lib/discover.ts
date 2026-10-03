@@ -1,4 +1,3 @@
-import { throwApiError } from './auth';
 import type { UploadedPaper } from './auth';
 
 export type ExternalPaperSource = 'arxiv' | 'semantic_scholar';
@@ -15,33 +14,12 @@ export type ExternalPaperResult = {
   importable: boolean;
   citation_count: number | null;
   categories: string[];
-  recommendation_score: number | null;
-  matched_categories: string[];
 };
 
 export type PaperSearchResponse = {
   query: string;
   results: ExternalPaperResult[];
   warnings: string[];
-};
-
-export type PaperRecommendationResponse = {
-  recommendations: ExternalPaperResult[];
-  interest_profile: Record<string, number>;
-  warnings: string[];
-  message: string | null;
-};
-
-export type RelatedPapersResponse = {
-  paper_id: number;
-  results: ExternalPaperResult[];
-  query: {
-    key_phrases: string[];
-    categories: string[];
-    abstract_source: 'llm' | 'opening_text' | null;
-  };
-  warnings: string[];
-  message: string | null;
 };
 
 export type PaperCitationsResponse = {
@@ -69,7 +47,8 @@ async function requestJson<T>(path: string, token: string, options?: RequestInit
   });
 
   if (!response.ok) {
-    await throwApiError(response);
+    const errorBody = (await response.json().catch(() => null)) as { detail?: string } | null;
+    throw new Error(errorBody?.detail ?? `Request failed with status ${response.status}`);
   }
 
   return response.json() as Promise<T>;
@@ -103,24 +82,8 @@ export async function importExternalPaperApi(token: string, paper: ExternalPaper
       pdf_url: paper.pdf_url,
       title: paper.title,
       external_url: paper.external_url,
-      categories: paper.categories,
     }),
   });
-}
-
-export async function getPaperRecommendationsApi(
-  token: string,
-  limit = 10,
-): Promise<PaperRecommendationResponse> {
-  return requestJson<PaperRecommendationResponse>(`/papers/recommendations?limit=${limit}`, token);
-}
-
-export async function getRelatedPapersApi(
-  token: string,
-  paperId: number | string,
-  limit = 10,
-): Promise<RelatedPapersResponse> {
-  return requestJson<RelatedPapersResponse>(`/papers/${paperId}/related?limit=${limit}`, token);
 }
 
 export async function getPaperCitationsApi(

@@ -17,16 +17,13 @@ class Settings(BaseSettings):
     faiss_index_path: str = "storage/faiss/index.faiss"
     reranker_model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     ollama_base_url: str = "http://localhost:11434"
-    ollama_model: str = "llama3:latest"
+    ollama_model: str = "llama3.2:3b"
     llm_request_timeout_seconds: int = 300
     arxiv_api_base_url: str = "https://export.arxiv.org/api/query"
     semantic_scholar_api_base_url: str = "https://api.semanticscholar.org/graph/v1"
     semantic_scholar_api_key: str | None = None
     external_api_timeout_seconds: float = 15.0
     external_api_max_retries: int = 2
-    notification_check_interval_hours: int = 4
-    notification_candidate_limit: int = 20
-    notification_score_threshold: float = 0.35
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

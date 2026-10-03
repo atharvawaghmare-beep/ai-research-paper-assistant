@@ -1,6 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import NotificationBell from '../components/NotificationBell';
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   [
@@ -37,7 +36,6 @@ export default function AppLayout() {
                 <NavLink className={navLinkClass} to="/compare">
                   Compare
                 </NavLink>
-                <NotificationBell />
                 <button
                   type="button"
                   onClick={() => {

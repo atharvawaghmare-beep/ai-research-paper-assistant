@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import AnalyticsPanel from '../components/AnalyticsPanel';
 import PdfUploadDropzone from '../components/PdfUploadDropzone';
-import RecommendationsPanel from '../components/RecommendationsPanel';
 import { deletePaperApi, listUploadedPapersApi, type UploadedPaper } from '../lib/auth';
 
 const TERMINAL_STATUSES = new Set(['ready', 'failed']);
@@ -137,8 +136,6 @@ export default function DashboardPage() {
       </header>
 
       <PdfUploadDropzone onUploaded={() => void refreshPapers()} />
-
-      <RecommendationsPanel />
 
       {recentlyViewed.length > 0 && (
         <section className="space-y-3">

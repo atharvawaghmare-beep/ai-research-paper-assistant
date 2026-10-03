@@ -15,9 +15,6 @@ dependencies = [
   "pydantic-settings>=2.4,<3.0",
   "email-validator>=2.2,<3.0",
   "passlib[bcrypt]>=1.7,<2.0",
-  # passlib 1.7.4 is incompatible with bcrypt>=5.0 (its 72-byte self-test now
-  # raises ValueError on every hash/verify call) — keep bcrypt on the 4.x line.
-  "bcrypt>=4.0,<4.1",
   "PyJWT>=2.9,<3.0",
   "python-multipart>=0.0.9,<1.0",
   "PyMuPDF>=1.24,<2.0",
@@ -27,18 +24,10 @@ dependencies = [
   "rank-bm25>=0.2,<1.0",
   "httpx>=0.27,<1.0",
   "slowapi>=0.1,<1.0",
-  "APScheduler>=3.10,<4.0",
-  "scikit-learn>=1.9,<2.0",
-  "joblib>=1.3,<2.0",
 ]
 
 [tool.setuptools]
 package-dir = {"" = "."}
-
-[project.optional-dependencies]
-training = [
-  "pandas>=2.2,<3.0",
-]
 
 [tool.setuptools.packages.find]
 where = ["."]

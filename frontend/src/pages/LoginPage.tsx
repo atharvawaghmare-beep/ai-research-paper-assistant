@@ -16,9 +16,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [formError, setFormError] = useState(() =>
-    new URLSearchParams(location.search).get('expired') ? 'Your session expired. Please sign in again.' : '',
-  );
+  const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   if (isAuthenticated) {

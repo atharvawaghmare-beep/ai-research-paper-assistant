@@ -81,7 +81,7 @@ def _page_line_spans(page: "pymupdf.Page") -> list[dict]:
             spans = line.get("spans", [])
             if not spans:
                 continue
-            text = "".join(span.get("text", "") for span in spans).replace("\x00", "").strip()
+            text = "".join(span.get("text", "") for span in spans).strip()
             if not text:
                 continue
             max_size = max(span.get("size", 0.0) for span in spans)
@@ -119,9 +119,7 @@ def _extract_pages_and_headings(pdf_path: Path) -> tuple[list[dict], list[tuple[
             lines = _page_line_spans(page)
             page_lines.append((page_number, lines))
             all_sizes.extend(line["size"] for line in lines)
-            # Strip NUL (0x00) characters PyMuPDF emits for some embedded fonts —
-            # Postgres TEXT columns reject them and the whole chunk insert fails.
-            pages.append({"page_number": page_number, "text": page.get_text("text").replace("\x00", "").strip()})
+            pages.append({"page_number": page_number, "text": page.get_text("text").strip()})
     finally:
         document.close()
 
