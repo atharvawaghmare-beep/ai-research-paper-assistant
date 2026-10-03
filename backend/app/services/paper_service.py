@@ -82,9 +82,8 @@ def extract_pdf_page_text(paper: UploadedPaper) -> tuple[dict, list[dict]]:
     pages: list[dict] = []
     try:
         for index, page in enumerate(document, start=1):
-            # PyMuPDF can emit NUL (0x00) characters for some embedded fonts /
-            # ligatures. Postgres TEXT columns reject them outright, which would
-            # fail the whole chunking commit for an otherwise fine paper.
+            # Strip NUL (0x00) characters PyMuPDF emits for some embedded fonts —
+            # Postgres TEXT columns reject them and the whole chunk insert fails.
             pages.append({
                 "page_number": index,
                 "text": page.get_text("text").replace("\x00", "").strip(),

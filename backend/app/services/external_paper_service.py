@@ -51,6 +51,7 @@ def _http_client(settings: Settings) -> httpx.Client:
         verify=_SSL_CONTEXT,
     )
 
+
 # Recent-category candidates for recommendations are cached briefly so every
 # dashboard load (and React StrictMode's dev-only double fetch) doesn't turn
 # into a fresh arXiv query — that burst is exactly what triggers arXiv's 406s.
@@ -165,27 +166,6 @@ def _build_arxiv_search_query(query: str | None, categories: list[str] | None) -
     return " AND ".join(terms)
 
 
-def build_arxiv_phrase_query(phrases: list[str], categories: list[str] | None = None) -> str:
-    """arXiv query for "papers mentioning any of these exact phrases", optionally
-    within categories: (all:"p1" OR all:"p2" ...) AND (cat:a OR cat:b).
-
-    Quoted phrases are matched as phrases by arXiv, which is what makes
-    LLM-extracted terminology like "whole-body humanoid locomotion" a useful
-    search key — unquoted, arXiv would OR the individual words together and
-    return everything mentioning "locomotion".
-    """
-    cleaned = [" ".join(phrase.replace('"', " ").split()) for phrase in phrases]
-    cleaned = [phrase for phrase in cleaned if phrase]
-    if not cleaned:
-        raise ValueError("at least one phrase is required")
-    phrase_clause = " OR ".join(f'all:"{phrase}"' for phrase in cleaned)
-    terms = [f"({phrase_clause})" if len(cleaned) > 1 else phrase_clause]
-    if categories:
-        category_clause = " OR ".join(f"cat:{category}" for category in categories)
-        terms.append(f"({category_clause})" if len(categories) > 1 else category_clause)
-    return " AND ".join(terms)
-
-
 def search_arxiv(
     query: str | None,
     limit: int,
@@ -193,13 +173,9 @@ def search_arxiv(
     *,
     categories: list[str] | None = None,
     sort: str = "relevance",
-    search_query: str | None = None,
 ) -> list[ExternalPaperResult]:
-    """`search_query`, when given, is a fully formed arXiv query string used
-    as-is (see `build_arxiv_phrase_query`); otherwise one is built from the
-    keyword + categories like the Discover page does."""
     params = {
-        "search_query": search_query or _build_arxiv_search_query(query, categories),
+        "search_query": _build_arxiv_search_query(query, categories),
         "start": 0,
         "max_results": limit,
     }
@@ -483,8 +459,6 @@ def search_recent_category_papers(
         logger.warning("recommendation_arxiv_search_failed categories=%r error=%s", categories, error)
         # Serve stale candidates over nothing if we have them — a rate-limit
         # blip shouldn't blank the recommendations panel.
-        # The full error (URL, status, attempts) is already in the log above;
-        # the UI just needs to know it's a transient upstream problem.
         if cached is not None:
             return [result.model_copy() for result in cached[1]], [
                 "arXiv is temporarily unavailable; showing recently fetched candidates."

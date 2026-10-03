@@ -1,4 +1,3 @@
-import { throwApiError } from './auth';
 import type { UploadedPaper } from './auth';
 
 export type ExternalPaperSource = 'arxiv' | 'semantic_scholar';
@@ -32,18 +31,6 @@ export type PaperRecommendationResponse = {
   message: string | null;
 };
 
-export type RelatedPapersResponse = {
-  paper_id: number;
-  results: ExternalPaperResult[];
-  query: {
-    key_phrases: string[];
-    categories: string[];
-    abstract_source: 'llm' | 'opening_text' | null;
-  };
-  warnings: string[];
-  message: string | null;
-};
-
 export type PaperCitationsResponse = {
   paper_id: number;
   available: boolean;
@@ -69,7 +56,8 @@ async function requestJson<T>(path: string, token: string, options?: RequestInit
   });
 
   if (!response.ok) {
-    await throwApiError(response);
+    const errorBody = (await response.json().catch(() => null)) as { detail?: string } | null;
+    throw new Error(errorBody?.detail ?? `Request failed with status ${response.status}`);
   }
 
   return response.json() as Promise<T>;
@@ -108,19 +96,8 @@ export async function importExternalPaperApi(token: string, paper: ExternalPaper
   });
 }
 
-export async function getPaperRecommendationsApi(
-  token: string,
-  limit = 10,
-): Promise<PaperRecommendationResponse> {
+export async function getPaperRecommendationsApi(token: string, limit = 10): Promise<PaperRecommendationResponse> {
   return requestJson<PaperRecommendationResponse>(`/papers/recommendations?limit=${limit}`, token);
-}
-
-export async function getRelatedPapersApi(
-  token: string,
-  paperId: number | string,
-  limit = 10,
-): Promise<RelatedPapersResponse> {
-  return requestJson<RelatedPapersResponse>(`/papers/${paperId}/related?limit=${limit}`, token);
 }
 
 export async function getPaperCitationsApi(

@@ -109,24 +109,6 @@ class PaperRecommendationResponse(BaseModel):
     message: str | None = None
 
 
-class RelatedPapersQueryInfo(BaseModel):
-    key_phrases: list[str] = Field(default_factory=list)
-    categories: list[str] = Field(default_factory=list)
-    abstract_source: str | None = Field(
-        default=None,
-        description='"llm" when the abstract came from the paper text, "opening_text" when the '
-        "document had no abstract (slides, notes) and its opening was used instead.",
-    )
-
-
-class RelatedPapersResponse(BaseModel):
-    paper_id: int
-    results: list[ExternalPaperResult]
-    query: RelatedPapersQueryInfo
-    warnings: list[str] = Field(default_factory=list)
-    message: str | None = None
-
-
 class PaperImportRequest(BaseModel):
     source: Literal["arxiv", "semantic_scholar"]
     external_id: str = Field(min_length=1, max_length=200)

@@ -1,4 +1,3 @@
-import { throwApiError } from './auth';
 export type NotificationItem = {
   id: number;
   user_id: number;
@@ -38,7 +37,8 @@ async function requestJson<T>(path: string, token: string, options?: RequestInit
   });
 
   if (!response.ok) {
-    await throwApiError(response);
+    const errorBody = (await response.json().catch(() => null)) as { detail?: string } | null;
+    throw new Error(errorBody?.detail ?? `Request failed with status ${response.status}`);
   }
 
   return response.json() as Promise<T>;

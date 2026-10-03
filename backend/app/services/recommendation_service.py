@@ -11,7 +11,6 @@ from app.models.user import User
 from app.schemas.paper import ExternalPaperResult
 from app.services import external_paper_service
 from app.services.classification_service import get_classification_service
-from app.services.paper_insight_service import get_cached_insight
 from app.services.external_paper_service import ARXIV_CATEGORIES
 
 
@@ -25,10 +24,9 @@ def build_interest_profile(papers: list[UploadedPaper]) -> dict[str, float]:
     """Aggregates paper categories with a modest view recency weight.
 
     Papers without arXiv category metadata (manual uploads, pre-Phase-14
-    imports) are classified locally instead. The classifier is fed the LLM-
-    extracted abstract when the insight step has produced one — title-only
-    classification is noticeably weaker (a tokenisation paper classified from
-    its title alone came back cs.AI/cs.IR; with its abstract, cs.CL at 0.65).
+    imports) are classified locally from their title instead — weaker than
+    classifying from the full abstract, but it keeps every paper in the
+    library contributing to the profile rather than silently dropping out.
     """
     profile: Counter[str] = Counter()
     classifier = get_classification_service()
@@ -36,11 +34,9 @@ def build_interest_profile(papers: list[UploadedPaper]) -> dict[str, float]:
         weight = 2.0 if paper.last_viewed_at is not None else 1.0
         categories = _paper_categories(paper)
         if not categories:
-            insight = get_cached_insight(paper)
-            abstract = insight["abstract"] if insight else ""
             categories = [
                 category
-                for category, _ in classifier.predict_categories(paper.title, abstract, threshold=0.3)[:3]
+                for category, _ in classifier.predict_categories(paper.title, "", threshold=0.3)[:3]
             ]
         for category in categories:
             profile[category] += weight
