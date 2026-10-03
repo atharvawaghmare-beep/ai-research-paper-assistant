@@ -82,6 +82,8 @@ class ExternalPaperResult(BaseModel):
         "citation-graph entries (references/citing papers/related suggestions) — "
         "plain arXiv/Semantic Scholar search results don't carry this.",
     )
+    recommendation_score: float | None = None
+    matched_categories: list[str] = Field(default_factory=list)
     categories: list[str] = Field(
         default_factory=list,
         description="Topic labels for this result: real arXiv category codes "
@@ -100,12 +102,20 @@ class PaperSearchResponse(BaseModel):
     )
 
 
+class PaperRecommendationResponse(BaseModel):
+    recommendations: list[ExternalPaperResult]
+    interest_profile: dict[str, float]
+    warnings: list[str] = Field(default_factory=list)
+    message: str | None = None
+
+
 class PaperImportRequest(BaseModel):
     source: Literal["arxiv", "semantic_scholar"]
     external_id: str = Field(min_length=1, max_length=200)
     pdf_url: str = Field(min_length=1, max_length=2048)
     title: str | None = Field(default=None, max_length=255)
     external_url: str | None = Field(default=None, max_length=2048)
+    categories: list[str] = Field(default_factory=list, max_length=20)
 
 
 class PaperCitationsResponse(BaseModel):

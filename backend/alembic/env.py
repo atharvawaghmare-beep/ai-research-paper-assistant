@@ -15,6 +15,7 @@ from app.models import (  # noqa: F401  (import registers models on Base.metadat
     RevokedToken,
     UploadedPaper,
     User,
+    Notification,
 )
 
 # this is the Alembic Config object, which provides

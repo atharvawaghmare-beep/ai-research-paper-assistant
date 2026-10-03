@@ -21,3 +21,4 @@ class User(Base):
 
     uploaded_papers: Mapped[list[UploadedPaper]] = relationship(back_populates="user", cascade="all, delete-orphan")
     chat_sessions: Mapped[list[ChatSession]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    notifications: Mapped[list[Notification]] = relationship(back_populates="user", cascade="all, delete-orphan")

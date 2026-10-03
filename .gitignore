@@ -27,3 +27,8 @@ __pycache__/
 *.log
 .DS_Store
 Thumbs.db
+# Raw Kaggle arXiv dataset (~11 GB) — download per backend/ml_models/README.md
+backend/ml_models/data/
+# Local scratch tokens
+backend/tok.txt
+*.zip

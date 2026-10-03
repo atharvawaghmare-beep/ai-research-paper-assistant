@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     semantic_scholar_api_key: str | None = None
     external_api_timeout_seconds: float = 15.0
     external_api_max_retries: int = 2
+    notification_check_interval_hours: int = 4
+    notification_candidate_limit: int = 20
+    notification_score_threshold: float = 0.35
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

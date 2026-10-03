@@ -4,5 +4,6 @@ from app.routers.chat import router as chat_router
 from app.routers.health import router as health_router
 from app.routers.papers import router as papers_router
 from app.routers.users import router as users_router
+from app.routers.notifications import router as notifications_router
 
-__all__ = ["analytics_router", "auth_router", "chat_router", "health_router", "papers_router", "users_router"]
+__all__ = ["analytics_router", "auth_router", "chat_router", "health_router", "notifications_router", "papers_router", "users_router"]

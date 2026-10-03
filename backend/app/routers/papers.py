@@ -18,11 +18,18 @@ from app.schemas.paper import (
     PaperCompareEntry,
     PaperCompareResponse,
     PaperImportRequest,
+    PaperRecommendationResponse,
     PaperSearchResponse,
     PaperSummaryResponse,
     UploadedPaperRead,
 )
-from app.services import citation_graph_service, concept_service, external_paper_service, summary_service
+from app.services import (
+    citation_graph_service,
+    concept_service,
+    external_paper_service,
+    recommendation_service,
+    summary_service,
+)
 from app.services.external_paper_service import ARXIV_CATEGORIES, ExternalPaperError
 from app.services.paper_service import (
     delete_uploaded_paper,
@@ -131,6 +138,7 @@ def import_external_paper(
         source=payload.source,
         external_id=payload.external_id,
         external_url=payload.external_url,
+        categories=[category for category in payload.categories if category in ARXIV_CATEGORIES],
     )
     background_tasks.add_task(process_uploaded_paper, paper.id)
 
@@ -144,6 +152,25 @@ def import_external_paper(
         logger.exception("citation_graph_prefetch_failed paper_id=%s", paper.id)
 
     return paper
+
+
+@router.get("/recommendations", response_model=PaperRecommendationResponse)
+@limiter.limit("10/minute")
+def get_paper_recommendations(
+    request: Request,
+    limit: int = Query(default=10, ge=1, le=25),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PaperRecommendationResponse:
+    recommendations, interest_profile, warnings, message = recommendation_service.get_recommendations(
+        db, current_user, limit=limit, settings=settings
+    )
+    return PaperRecommendationResponse(
+        recommendations=recommendations,
+        interest_profile=interest_profile,
+        warnings=warnings,
+        message=message,
+    )
 
 
 @router.get("/compare", response_model=PaperCompareResponse)

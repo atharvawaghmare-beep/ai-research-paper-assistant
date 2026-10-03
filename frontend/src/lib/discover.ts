@@ -14,12 +14,21 @@ export type ExternalPaperResult = {
   importable: boolean;
   citation_count: number | null;
   categories: string[];
+  recommendation_score: number | null;
+  matched_categories: string[];
 };
 
 export type PaperSearchResponse = {
   query: string;
   results: ExternalPaperResult[];
   warnings: string[];
+};
+
+export type PaperRecommendationResponse = {
+  recommendations: ExternalPaperResult[];
+  interest_profile: Record<string, number>;
+  warnings: string[];
+  message: string | null;
 };
 
 export type PaperCitationsResponse = {
@@ -82,8 +91,13 @@ export async function importExternalPaperApi(token: string, paper: ExternalPaper
       pdf_url: paper.pdf_url,
       title: paper.title,
       external_url: paper.external_url,
+      categories: paper.categories,
     }),
   });
+}
+
+export async function getPaperRecommendationsApi(token: string, limit = 10): Promise<PaperRecommendationResponse> {
+  return requestJson<PaperRecommendationResponse>(`/papers/recommendations?limit=${limit}`, token);
 }
 
 export async function getPaperCitationsApi(
