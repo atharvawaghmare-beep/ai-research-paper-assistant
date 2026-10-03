@@ -34,6 +34,36 @@ export type UploadedPaper = {
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1';
 
+// Login/register answer 401 for a wrong password — that must stay an inline form
+// error, not a redirect loop.
+const CREDENTIAL_ENDPOINTS = ['/auth/login', '/auth/register'];
+
+/**
+ * Converts a failed response into a thrown Error carrying the server's `detail`.
+ * On a 401 from any authenticated endpoint the stored token is dead (expired
+ * after ACCESS_TOKEN_EXPIRE_MINUTES, or revoked), so the session is cleared and
+ * the app navigates to the login page instead of every panel rendering
+ * "Could not validate credentials" on its own.
+ */
+export async function throwApiError(response: Response): Promise<never> {
+  const errorBody = (await response.json().catch(() => null)) as { detail?: string } | null;
+  const detail = errorBody?.detail ?? `Request failed with status ${response.status}`;
+
+  const isCredentialCall = CREDENTIAL_ENDPOINTS.some((endpoint) => response.url.endsWith(endpoint));
+  if (response.status === 401 && !isCredentialCall) {
+    handleSessionExpired();
+  }
+
+  throw new Error(detail);
+}
+
+function handleSessionExpired(): void {
+  storeToken(null);
+  if (window.location.pathname !== '/login') {
+    window.location.assign('/login?expired=1');
+  }
+}
+
 async function requestJson<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${apiBaseUrl}${path}`, {
     headers: {
@@ -44,8 +74,7 @@ async function requestJson<T>(path: string, options?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    const errorBody = (await response.json().catch(() => null)) as { detail?: string } | null;
-    throw new Error(errorBody?.detail ?? `Request failed with status ${response.status}`);
+    await throwApiError(response);
   }
 
   return response.json() as Promise<T>;
@@ -86,8 +115,7 @@ export async function currentUserApi(token: string): Promise<AuthUser> {
   });
 
   if (!response.ok) {
-    const errorBody = (await response.json().catch(() => null)) as { detail?: string } | null;
-    throw new Error(errorBody?.detail ?? `Request failed with status ${response.status}`);
+    await throwApiError(response);
   }
 
   return response.json() as Promise<AuthUser>;
@@ -118,8 +146,7 @@ export async function listUploadedPapersApi(
   });
 
   if (!response.ok) {
-    const errorBody = (await response.json().catch(() => null)) as { detail?: string } | null;
-    throw new Error(errorBody?.detail ?? `Request failed with status ${response.status}`);
+    await throwApiError(response);
   }
 
   return response.json() as Promise<UploadedPaper[]>;
@@ -133,8 +160,7 @@ export async function getPaperApi(token: string, paperId: number | string): Prom
   });
 
   if (!response.ok) {
-    const errorBody = (await response.json().catch(() => null)) as { detail?: string } | null;
-    throw new Error(errorBody?.detail ?? `Request failed with status ${response.status}`);
+    await throwApiError(response);
   }
 
   return response.json() as Promise<UploadedPaper>;
@@ -149,7 +175,6 @@ export async function deletePaperApi(token: string, paperId: number | string): P
   });
 
   if (!response.ok) {
-    const errorBody = (await response.json().catch(() => null)) as { detail?: string } | null;
-    throw new Error(errorBody?.detail ?? `Request failed with status ${response.status}`);
+    await throwApiError(response);
   }
 }

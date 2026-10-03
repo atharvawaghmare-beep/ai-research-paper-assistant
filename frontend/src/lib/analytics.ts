@@ -1,3 +1,4 @@
+import { throwApiError } from './auth';
 export type ActivityPoint = {
   date: string;
   questions_asked: number;
@@ -33,8 +34,7 @@ export async function getAnalyticsSummaryApi(token: string): Promise<AnalyticsSu
   });
 
   if (!response.ok) {
-    const errorBody = (await response.json().catch(() => null)) as { detail?: string } | null;
-    throw new Error(errorBody?.detail ?? `Request failed with status ${response.status}`);
+    await throwApiError(response);
   }
 
   return response.json() as Promise<AnalyticsSummaryResponse>;

@@ -15,7 +15,7 @@ class LLMGenerationError(RuntimeError):
     """Raised when the configured LLM backend fails to produce a response."""
 
 
-def generate_chat_completion(messages: list[dict[str, str]]) -> str:
+def generate_chat_completion(messages: list[dict[str, str]], *, json_mode: bool = False) -> str:
     """Generate a chat completion from the configured LLM backend.
 
     `messages` is a plain list of {"role": "system"|"user"|"assistant", "content": str}
@@ -23,6 +23,10 @@ def generate_chat_completion(messages: list[dict[str, str]]) -> str:
     return value is a plain string. Callers never see anything Ollama-specific, so
     swapping the backend later (e.g. to the Anthropic or OpenAI API) means rewriting
     the body of this one function, not any caller.
+
+    `json_mode=True` asks the backend to constrain its output to valid JSON (Ollama's
+    `format: "json"`); callers still validate the shape, this just removes the
+    "prose around the JSON" failure mode for structured-extraction prompts.
 
     Currently backed by a local Ollama server (see OLLAMA_BASE_URL / OLLAMA_MODEL).
     Every call is logged with latency and token counts — the closest local-model
@@ -38,6 +42,7 @@ def generate_chat_completion(messages: list[dict[str, str]]) -> str:
                 "messages": messages,
                 "stream": False,
                 "options": {"temperature": 0.2},
+                **({"format": "json"} if json_mode else {}),
             },
             timeout=settings.llm_request_timeout_seconds,
         )

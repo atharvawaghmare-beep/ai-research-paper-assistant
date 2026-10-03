@@ -1,3 +1,4 @@
+import { throwApiError } from './auth';
 import type { UploadedPaper } from './auth';
 
 export type Citation = {
@@ -55,8 +56,7 @@ async function requestJson<T>(path: string, token: string, options?: RequestInit
   });
 
   if (!response.ok) {
-    const errorBody = (await response.json().catch(() => null)) as { detail?: string } | null;
-    throw new Error(errorBody?.detail ?? `Request failed with status ${response.status}`);
+    await throwApiError(response);
   }
 
   return response.json() as Promise<T>;

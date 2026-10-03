@@ -82,9 +82,12 @@ def extract_pdf_page_text(paper: UploadedPaper) -> tuple[dict, list[dict]]:
     pages: list[dict] = []
     try:
         for index, page in enumerate(document, start=1):
+            # PyMuPDF can emit NUL (0x00) characters for some embedded fonts /
+            # ligatures. Postgres TEXT columns reject them outright, which would
+            # fail the whole chunking commit for an otherwise fine paper.
             pages.append({
                 "page_number": index,
-                "text": page.get_text("text").strip(),
+                "text": page.get_text("text").replace("\x00", "").strip(),
             })
 
         metadata = {
@@ -242,6 +245,7 @@ def save_imported_pdf(
     source: str,
     external_id: str,
     external_url: str | None,
+    categories: list[str] | None = None,
 ) -> UploadedPaper:
     """Persists a PDF downloaded server-side from an external search result (arXiv /
     Semantic Scholar) through the identical dedupe/size/storage path a manual upload
@@ -260,5 +264,6 @@ def save_imported_pdf(
             "source": f"{source}-import",
             "external_id": external_id,
             "external_url": external_url,
+            "categories": categories or [],
         },
     )

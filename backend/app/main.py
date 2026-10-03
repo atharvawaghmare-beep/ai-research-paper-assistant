@@ -1,5 +1,7 @@
 import logging
+from contextlib import asynccontextmanager
 
+from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
@@ -7,7 +9,8 @@ from slowapi.errors import RateLimitExceeded
 
 from app.config.settings import get_settings
 from app.rate_limit import limiter
-from app.routers import analytics_router, auth_router, chat_router, health_router, papers_router, users_router
+from app.services.notification_service import run_alert_job
+from app.routers import analytics_router, auth_router, chat_router, health_router, notifications_router, papers_router, users_router
 
 # Schema management lives in Alembic now (see backend/alembic/), not here.
 # Run `alembic upgrade head` before starting the app.
@@ -21,7 +24,24 @@ logging.getLogger("app").setLevel(logging.INFO)
 
 settings = get_settings()
 
-app = FastAPI(title=settings.app_name, version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    scheduler = BackgroundScheduler(timezone="UTC")
+    scheduler.add_job(
+        run_alert_job,
+        "interval",
+        hours=settings.notification_check_interval_hours,
+        id="paper-alert-scan",
+        replace_existing=True,
+    )
+    scheduler.start()
+    try:
+        yield
+    finally:
+        scheduler.shutdown(wait=False)
+
+app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -41,6 +61,7 @@ app.include_router(papers_router, prefix=settings.api_prefix, tags=["papers"])
 app.include_router(chat_router, prefix=settings.api_prefix, tags=["chat"])
 app.include_router(users_router, prefix=settings.api_prefix, tags=["users"])
 app.include_router(analytics_router, prefix=settings.api_prefix, tags=["analytics"])
+app.include_router(notifications_router, prefix=settings.api_prefix, tags=["notifications"])
 
 
 @app.get("/")

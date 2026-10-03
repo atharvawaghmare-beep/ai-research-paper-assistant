@@ -10,7 +10,10 @@ from passlib.context import CryptContext
 from app.config.settings import get_settings
 
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# bcrypt itself accepts only 72 UTF-8 bytes. bcrypt_sha256 pre-hashes the
+# password before bcrypt, removing that backend limitation while still allowing
+# existing bcrypt hashes to authenticate.
+pwd_context = CryptContext(schemes=["bcrypt_sha256", "bcrypt"], deprecated="bcrypt")
 settings = get_settings()
 
 

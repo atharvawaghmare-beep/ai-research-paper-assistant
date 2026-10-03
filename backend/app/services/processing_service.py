@@ -10,7 +10,7 @@ from app.config.database import SessionLocal
 from app.models.document_chunk import DocumentChunk
 from app.models.document_embedding import DocumentEmbedding
 from app.models.uploaded_paper import UploadedPaper
-from app.services import chunking_service, embedding_service, faiss_index_service
+from app.services import chunking_service, embedding_service, faiss_index_service, paper_insight_service
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +40,13 @@ def process_uploaded_paper(paper_id: int) -> None:
             paper.processing_status = "ready"
             paper.processed_at = datetime.now(timezone.utc)
             db.commit()
+
+            # Content insight (abstract + key phrases via the LLM) feeds the
+            # interest profile and related-paper search. It runs *after* the
+            # paper is marked ready so chat/summary aren't held hostage to a
+            # slow local model, and it's best-effort: the service records its
+            # own failed/ready marker on paper_metadata, never raises.
+            paper_insight_service.extract_paper_insight(db, paper)
         except Exception:
             logger.exception("Processing pipeline failed for paper %s", paper_id)
             db.rollback()

@@ -18,11 +18,21 @@ from app.schemas.paper import (
     PaperCompareEntry,
     PaperCompareResponse,
     PaperImportRequest,
+    PaperRecommendationResponse,
     PaperSearchResponse,
     PaperSummaryResponse,
+    RelatedPapersQueryInfo,
+    RelatedPapersResponse,
     UploadedPaperRead,
 )
-from app.services import citation_graph_service, concept_service, external_paper_service, summary_service
+from app.services import (
+    citation_graph_service,
+    concept_service,
+    external_paper_service,
+    recommendation_service,
+    related_paper_service,
+    summary_service,
+)
 from app.services.external_paper_service import ARXIV_CATEGORIES, ExternalPaperError
 from app.services.paper_service import (
     delete_uploaded_paper,
@@ -131,6 +141,7 @@ def import_external_paper(
         source=payload.source,
         external_id=payload.external_id,
         external_url=payload.external_url,
+        categories=[category for category in payload.categories if category in ARXIV_CATEGORIES],
     )
     background_tasks.add_task(process_uploaded_paper, paper.id)
 
@@ -144,6 +155,25 @@ def import_external_paper(
         logger.exception("citation_graph_prefetch_failed paper_id=%s", paper.id)
 
     return paper
+
+
+@router.get("/recommendations", response_model=PaperRecommendationResponse)
+@limiter.limit("10/minute")
+def get_paper_recommendations(
+    request: Request,
+    limit: int = Query(default=10, ge=1, le=25),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PaperRecommendationResponse:
+    recommendations, interest_profile, warnings, message = recommendation_service.get_recommendations(
+        db, current_user, limit=limit, settings=settings
+    )
+    return PaperRecommendationResponse(
+        recommendations=recommendations,
+        interest_profile=interest_profile,
+        warnings=warnings,
+        message=message,
+    )
 
 
 @router.get("/compare", response_model=PaperCompareResponse)
@@ -213,6 +243,33 @@ def get_paper_summary(
     paper = get_user_paper_by_id(db, current_user, paper_id)
     summary, cached = summary_service.get_or_generate_summary(db, paper, force=refresh)
     return PaperSummaryResponse(summary=summary, cached=cached, generated_at=paper.summary_generated_at)
+
+
+@router.get("/{paper_id}/related", response_model=RelatedPapersResponse)
+@limiter.limit("10/minute")
+def get_related_papers(
+    request: Request,
+    paper_id: int,
+    limit: int = Query(default=10, ge=1, le=25),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RelatedPapersResponse:
+    paper = get_user_paper_by_id(db, current_user, paper_id)
+    if paper.processing_status != "ready":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Paper is still processing (status: {paper.processing_status})",
+        )
+    results, query_info, warnings, message = related_paper_service.get_related_papers(
+        db, current_user, paper, limit=limit, settings=settings
+    )
+    return RelatedPapersResponse(
+        paper_id=paper.id,
+        results=results,
+        query=RelatedPapersQueryInfo(**query_info),
+        warnings=warnings,
+        message=message,
+    )
 
 
 @router.get("/{paper_id}/citations", response_model=PaperCitationsResponse)

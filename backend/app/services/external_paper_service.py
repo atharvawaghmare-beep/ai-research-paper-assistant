@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import ssl
 import time
 import xml.etree.ElementTree as ET
 
@@ -10,6 +11,51 @@ from app.config.settings import Settings, get_settings
 from app.schemas.paper import ExternalPaperResult
 
 logger = logging.getLogger("app.external_papers")
+
+_RETRYABLE_STATUSES = {406, 429}
+
+
+class _NoAlpnSSLContext(ssl.SSLContext):
+    """An SSL context that ignores ALPN.
+
+    arXiv's edge answers 406 Not Acceptable to any TLS connection that
+    negotiates ALPN ``http/1.1`` whenever the request misses their cache
+    (verified with raw sockets: identical request, ALPN on -> 406, ALPN off ->
+    200). httpcore unconditionally calls ``set_alpn_protocols`` on whatever
+    context it is given, so the only way to opt out is a context that swallows
+    that call. Without ALPN the server simply falls back to HTTP/1.1.
+    """
+
+    def set_alpn_protocols(self, alpn_protocols) -> None:  # noqa: ARG002
+        return None
+
+
+def _build_ssl_context() -> ssl.SSLContext:
+    context = _NoAlpnSSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.check_hostname = True
+    context.verify_mode = ssl.CERT_REQUIRED
+    context.load_default_certs()
+    return context
+
+
+_SSL_CONTEXT = _build_ssl_context()
+
+
+def _http_client(settings: Settings) -> httpx.Client:
+    """One place to construct the outbound client so every external call
+    (arXiv search, Semantic Scholar, PDF download) shares the same timeout,
+    redirect policy, and the ALPN-free TLS context."""
+    return httpx.Client(
+        timeout=settings.external_api_timeout_seconds,
+        follow_redirects=True,
+        verify=_SSL_CONTEXT,
+    )
+
+# Recent-category candidates for recommendations are cached briefly so every
+# dashboard load (and React StrictMode's dev-only double fetch) doesn't turn
+# into a fresh arXiv query — that burst is exactly what triggers arXiv's 406s.
+_RECENT_CACHE_TTL_SECONDS = 600
+_recent_category_cache: dict[tuple[tuple[str, ...], int], tuple[float, list[ExternalPaperResult]]] = {}
 
 _ATOM_NS = "{http://www.w3.org/2005/Atom}"
 
@@ -47,9 +93,13 @@ def _request_with_retry(
     **kwargs,
 ) -> httpx.Response:
     """Issues one HTTP request with exponential backoff on timeouts, connection
-    errors, 429s, and 5xxs — the failure modes a free, rate-limited public API
-    actually produces. Any other 4xx (bad query, 404, etc.) is not retried since
-    retrying it would just fail the same way again.
+    errors, 429s, 406s, and 5xxs — the failure modes a free, rate-limited public
+    API actually produces. Any other 4xx (bad query, 404, etc.) is not retried
+    since retrying it would just fail the same way again.
+
+    406 is included because arXiv's edge returns it (not 429) when requests
+    arrive faster than its ~3s/request guideline; the identical query succeeds a
+    moment later, so it behaves like a rate limit rather than a bad request.
     """
     last_error: Exception | None = None
     for attempt in range(max_retries + 1):
@@ -64,7 +114,7 @@ def _request_with_retry(
                 f"Request to {url.split('?')[0]} failed after {max_retries + 1} attempts: {error}"
             ) from error
 
-        if response.status_code == 429 or response.status_code >= 500:
+        if response.status_code in _RETRYABLE_STATUSES or response.status_code >= 500:
             last_error = httpx.HTTPStatusError(
                 f"retryable status {response.status_code}", request=response.request, response=response
             )
@@ -115,6 +165,27 @@ def _build_arxiv_search_query(query: str | None, categories: list[str] | None) -
     return " AND ".join(terms)
 
 
+def build_arxiv_phrase_query(phrases: list[str], categories: list[str] | None = None) -> str:
+    """arXiv query for "papers mentioning any of these exact phrases", optionally
+    within categories: (all:"p1" OR all:"p2" ...) AND (cat:a OR cat:b).
+
+    Quoted phrases are matched as phrases by arXiv, which is what makes
+    LLM-extracted terminology like "whole-body humanoid locomotion" a useful
+    search key — unquoted, arXiv would OR the individual words together and
+    return everything mentioning "locomotion".
+    """
+    cleaned = [" ".join(phrase.replace('"', " ").split()) for phrase in phrases]
+    cleaned = [phrase for phrase in cleaned if phrase]
+    if not cleaned:
+        raise ValueError("at least one phrase is required")
+    phrase_clause = " OR ".join(f'all:"{phrase}"' for phrase in cleaned)
+    terms = [f"({phrase_clause})" if len(cleaned) > 1 else phrase_clause]
+    if categories:
+        category_clause = " OR ".join(f"cat:{category}" for category in categories)
+        terms.append(f"({category_clause})" if len(categories) > 1 else category_clause)
+    return " AND ".join(terms)
+
+
 def search_arxiv(
     query: str | None,
     limit: int,
@@ -122,9 +193,13 @@ def search_arxiv(
     *,
     categories: list[str] | None = None,
     sort: str = "relevance",
+    search_query: str | None = None,
 ) -> list[ExternalPaperResult]:
+    """`search_query`, when given, is a fully formed arXiv query string used
+    as-is (see `build_arxiv_phrase_query`); otherwise one is built from the
+    keyword + categories like the Discover page does."""
     params = {
-        "search_query": _build_arxiv_search_query(query, categories),
+        "search_query": search_query or _build_arxiv_search_query(query, categories),
         "start": 0,
         "max_results": limit,
     }
@@ -134,7 +209,7 @@ def search_arxiv(
         params["sortBy"] = "submittedDate"
         params["sortOrder"] = "descending"
 
-    with httpx.Client(timeout=settings.external_api_timeout_seconds, follow_redirects=True) as client:
+    with _http_client(settings) as client:
         response = _request_with_retry(
             client,
             "GET",
@@ -194,7 +269,7 @@ def search_arxiv(
 
 def search_semantic_scholar(query: str, limit: int, settings: Settings) -> list[ExternalPaperResult]:
     headers = {"x-api-key": settings.semantic_scholar_api_key} if settings.semantic_scholar_api_key else None
-    with httpx.Client(timeout=settings.external_api_timeout_seconds, follow_redirects=True) as client:
+    with _http_client(settings) as client:
         response = _request_with_retry(
             client,
             "GET",
@@ -324,7 +399,7 @@ def fetch_semantic_scholar_paper_graph(
 
     headers = {"x-api-key": settings.semantic_scholar_api_key} if settings.semantic_scholar_api_key else None
     try:
-        with httpx.Client(timeout=settings.external_api_timeout_seconds, follow_redirects=True) as client:
+        with _http_client(settings) as client:
             response = _request_with_retry(
                 client,
                 "GET",
@@ -386,6 +461,42 @@ def search_papers(
     return results, warnings
 
 
+def search_recent_category_papers(
+    categories: list[str],
+    limit: int,
+    settings: Settings | None = None,
+) -> tuple[list[ExternalPaperResult], list[str]]:
+    """Fetches recent arXiv candidates for a user's interest categories.
+
+    Recommendations intentionally use arXiv only: it supports category-only
+    recent browsing, while Semantic Scholar requires a keyword query.
+    """
+    settings = settings or get_settings()
+    cache_key = (tuple(sorted(categories)), limit)
+    cached = _recent_category_cache.get(cache_key)
+    if cached is not None and time.monotonic() - cached[0] < _RECENT_CACHE_TTL_SECONDS:
+        return [result.model_copy() for result in cached[1]], []
+
+    try:
+        results = search_arxiv(None, limit, settings, categories=categories, sort="recent")
+    except ExternalPaperError as error:
+        logger.warning("recommendation_arxiv_search_failed categories=%r error=%s", categories, error)
+        # Serve stale candidates over nothing if we have them — a rate-limit
+        # blip shouldn't blank the recommendations panel.
+        # The full error (URL, status, attempts) is already in the log above;
+        # the UI just needs to know it's a transient upstream problem.
+        if cached is not None:
+            return [result.model_copy() for result in cached[1]], [
+                "arXiv is temporarily unavailable; showing recently fetched candidates."
+            ]
+        return [], ["arXiv is temporarily unavailable (it returns sporadic errors); refresh in a minute to retry."]
+
+    _recent_category_cache[cache_key] = (time.monotonic(), results)
+    # Callers annotate results per-user (matched_categories, score), so hand out
+    # copies and keep the cached originals pristine.
+    return [result.model_copy() for result in results], []
+
+
 def download_pdf(pdf_url: str, max_size_bytes: int, settings: Settings | None = None) -> bytes:
     """Downloads a PDF from an external source (arXiv / Semantic Scholar open-access
     link) with the same retry/backoff behavior as search, then enforces the same
@@ -393,7 +504,7 @@ def download_pdf(pdf_url: str, max_size_bytes: int, settings: Settings | None = 
     should not be able to bypass either.
     """
     settings = settings or get_settings()
-    with httpx.Client(timeout=settings.external_api_timeout_seconds, follow_redirects=True) as client:
+    with _http_client(settings) as client:
         response = _request_with_retry(
             client,
             "GET",

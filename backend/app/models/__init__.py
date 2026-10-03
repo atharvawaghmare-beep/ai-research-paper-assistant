@@ -5,6 +5,7 @@ from app.models.document_chunk import DocumentChunk
 from app.models.document_embedding import DocumentEmbedding
 from app.models.chat_session import ChatSession
 from app.models.chat_message import ChatMessage
+from app.models.notification import Notification
 
 __all__ = [
 	"User",
@@ -14,4 +15,5 @@ __all__ = [
 	"DocumentEmbedding",
 	"ChatSession",
 	"ChatMessage",
+	"Notification",
 ]
