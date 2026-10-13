@@ -3,6 +3,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import CitationList from '../components/CitationList';
 import CitationsPanel from '../components/CitationsPanel';
 import ConceptExplainPanel from '../components/ConceptExplainPanel';
+import FormatReviewPanel from '../components/FormatReviewPanel';
+import LanguageSelector from '../components/LanguageSelector';
 import SummaryPanel from '../components/SummaryPanel';
 import { useAuth } from '../context/AuthContext';
 import { deletePaperApi, getPaperApi, type UploadedPaper } from '../lib/auth';
@@ -27,6 +29,7 @@ const TABS = [
   { value: 'summary', label: 'Summary' },
   { value: 'explain', label: 'Explain a concept' },
   { value: 'citations', label: 'Citations' },
+  { value: 'format-review', label: 'Check my paper' },
 ] as const;
 
 type Tab = (typeof TABS)[number]['value'];
@@ -39,6 +42,29 @@ export default function PaperDetailPage() {
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<Tab>('chat');
+
+  // Phase 18: the selected display language persists across visits (per
+  // browser) via localStorage — null means English/no translation.
+  const [lang, setLang] = useState<string | null>(() => {
+    try {
+      return window.localStorage.getItem('marginal:lang') || null;
+    } catch {
+      return null;
+    }
+  });
+  function handleLangChange(next: string | null) {
+    setLang(next);
+    try {
+      if (next) {
+        window.localStorage.setItem('marginal:lang', next);
+      } else {
+        window.localStorage.removeItem('marginal:lang');
+      }
+    } catch {
+      // Private browsing / storage disabled — the selection still works for
+      // this page view, it just won't persist to the next visit.
+    }
+  }
 
   const [paper, setPaper] = useState<UploadedPaper | null>(null);
   const [paperError, setPaperError] = useState('');
@@ -146,6 +172,7 @@ export default function PaperDetailPage() {
       content: question,
       citations: null,
       created_at: new Date().toISOString(),
+      translated_content: null,
     };
     setMessages((current) => [...current, optimisticMessage]);
     setSending(true);
@@ -153,7 +180,7 @@ export default function PaperDetailPage() {
     const isNewSession = sessionId === null;
 
     try {
-      const result = await sendChatMessageApi(token, paperId, question, sessionId);
+      const result = await sendChatMessageApi(token, paperId, question, sessionId, [], lang);
       setSessionId(result.session_id);
       setMessages((current) => [
         ...current.filter((message) => message.id !== optimisticMessage.id),
@@ -209,6 +236,7 @@ export default function PaperDetailPage() {
         </div>
         {paper && (
           <div className="flex shrink-0 items-center gap-2">
+            <LanguageSelector value={lang} onChange={handleLangChange} />
             <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
               {paper.processing_status}
             </span>
@@ -321,9 +349,10 @@ export default function PaperDetailPage() {
                             message.role === 'user'
                               ? 'bg-brand-600 text-white'
                               : 'border border-slate-200 bg-slate-50 text-slate-800',
+                            message.translated_content ? 'translated-text' : '',
                           ].join(' ')}
                         >
-                          {message.content}
+                          {message.translated_content ?? message.content}
                         </div>
 
                         {message.role === 'assistant' && (
@@ -381,14 +410,25 @@ export default function PaperDetailPage() {
           </>
         )}
 
-        {activeTab === 'summary' && paperId && <SummaryPanel paperId={paperId} isPaperReady={Boolean(isPaperReady)} />}
+        {activeTab === 'summary' && paperId && (
+          <SummaryPanel
+            paperId={paperId}
+            isPaperReady={Boolean(isPaperReady)}
+            lang={lang}
+            onLangChange={handleLangChange}
+          />
+        )}
 
         {activeTab === 'explain' && paperId && (
-          <ConceptExplainPanel paperId={paperId} isPaperReady={Boolean(isPaperReady)} />
+          <ConceptExplainPanel paperId={paperId} isPaperReady={Boolean(isPaperReady)} lang={lang} />
         )}
 
         {activeTab === 'citations' && paperId && (
           <CitationsPanel paperId={paperId} isPaperReady={Boolean(isPaperReady)} />
+        )}
+
+        {activeTab === 'format-review' && paperId && (
+          <FormatReviewPanel paperId={paperId} isPaperReady={Boolean(isPaperReady)} lang={lang} />
         )}
       </div>
     </section>

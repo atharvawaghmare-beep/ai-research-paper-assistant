@@ -24,6 +24,15 @@ a {
   text-decoration: none;
 }
 
+/* Phase 18: applied only to text actually rendered in a translated language —
+   Devanagari-script Hindi needs this font ahead of Inter (which has no
+   Devanagari glyphs at all) to render correctly instead of falling through
+   to a generic system fallback. Scoped to a class, not swapped globally,
+   since the rest of the UI stays in English/Inter regardless of this. */
+.translated-text {
+  font-family: 'Noto Sans Devanagari', 'Inter', system-ui, sans-serif;
+}
+
 ::selection {
   background: rgba(79, 70, 229, 0.15);
   color: #1e1b4b;

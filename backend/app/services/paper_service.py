@@ -157,6 +157,7 @@ def _persist_new_paper(
     mime_type: str | None,
     title: str | None = None,
     extra_metadata: dict,
+    is_user_authored: bool = False,
 ) -> UploadedPaper:
     """Dedupe-by-checksum, size-check, on-disk storage, and `UploadedPaper` row
     creation shared by both entry points that add a paper to a user's library: a
@@ -205,6 +206,7 @@ def _persist_new_paper(
         checksum_sha256=checksum,
         processing_status="uploaded",
         paper_metadata={"upload_dir": str(upload_dir), **extra_metadata},
+        is_user_authored=is_user_authored,
     )
 
     db.add(paper)
@@ -218,6 +220,7 @@ async def save_uploaded_pdf(
     current_user: User,
     upload_file: UploadFile,
     settings: Settings,
+    is_user_authored: bool = False,
 ) -> UploadedPaper:
     if upload_file.content_type not in ALLOWED_PDF_MIME_TYPES and not (upload_file.filename or "").lower().endswith(".pdf"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only PDF files are supported")
@@ -231,6 +234,7 @@ async def save_uploaded_pdf(
         original_filename=upload_file.filename or "paper.pdf",
         mime_type=upload_file.content_type,
         extra_metadata={"source": "pdf-upload"},
+        is_user_authored=is_user_authored,
     )
 
 

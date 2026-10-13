@@ -13,6 +13,11 @@ class ChatMessageCreate(BaseModel):
     # Q&A). Ignored when continuing an existing session; its paper set is fixed
     # at creation.
     additional_paper_ids: list[int] = Field(default_factory=list)
+    # Phase 18: retrieval and the stored message content always stay English —
+    # only the answer actually displayed for this turn is translated, and only
+    # on demand (not persisted; the same question asked again without `lang`
+    # shows the original English answer untouched).
+    lang: str | None = None
 
 
 class ChatMessageRead(BaseModel):
@@ -25,6 +30,10 @@ class ChatMessageRead(BaseModel):
     content: str
     citations: list[dict] | None
     created_at: datetime
+    # Set only on the assistant message of a turn where `lang` was requested
+    # and translation succeeded — citations are extracted from (and still
+    # refer to) the English `content` either way.
+    translated_content: str | None = None
 
 
 class ChatSessionRead(BaseModel):

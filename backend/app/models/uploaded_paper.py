@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -29,6 +29,21 @@ class UploadedPaper(Base):
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     summary_generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_viewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    # Phase 16: the structured {outline, section_summaries, overall_summary,
+    # equations, methods} shape, replacing the old plain-text `summary` column
+    # above (kept, untouched, for any pre-Phase-16 row — never read by new code,
+    # which treats a missing/stale-version structured_summary as a cache miss
+    # and regenerates fresh rather than trying to migrate old plain text into
+    # the new shape, which has no outline/equations data to go with it anyway).
+    structured_summary: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    summary_status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
+    summary_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Phase 17: distinguishes "a paper I wrote" (a draft/report to get format
+    # feedback on) from an ordinary library paper. Citation-graph prefetch
+    # (Phase 9) only ever runs on an *import*, never a manual upload, so this
+    # flag doesn't need to touch that path to keep an unpublished paper from
+    # being sent to Semantic Scholar — it already never was.
+    is_user_authored: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     user: Mapped[User] = relationship(back_populates="uploaded_papers")
     chunks: Mapped[list[DocumentChunk]] = relationship(

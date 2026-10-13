@@ -30,6 +30,11 @@ dependencies = [
   "APScheduler>=3.10,<4.0",
   "scikit-learn>=1.9,<2.0",
   "joblib>=1.3,<2.0",
+  # Phase 18 (translation): sentence-transformers already pulls in
+  # transformers+torch transitively, but not the sentencepiece tokenizer
+  # backend NLLB-200 needs — added explicitly rather than relying on it
+  # coming along for the ride.
+  "sentencepiece>=0.2,<1.0",
 ]
 
 [tool.setuptools]

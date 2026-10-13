@@ -30,6 +30,7 @@ export type UploadedPaper = {
   processed_at: string | null;
   summary_generated_at: string | null;
   last_viewed_at: string | null;
+  is_user_authored: boolean;
 };
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1';

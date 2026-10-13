@@ -93,6 +93,7 @@ export default function ComparePage() {
       content: question,
       citations: null,
       created_at: new Date().toISOString(),
+      translated_content: null,
     };
     setMessages((current) => [...current, optimisticMessage]);
     setSending(true);

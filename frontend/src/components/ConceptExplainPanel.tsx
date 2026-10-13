@@ -12,9 +12,10 @@ const DIFFICULTIES: { value: Difficulty; label: string }[] = [
 type ConceptExplainPanelProps = {
   paperId: string;
   isPaperReady: boolean;
+  lang: string | null;
 };
 
-export default function ConceptExplainPanel({ paperId, isPaperReady }: ConceptExplainPanelProps) {
+export default function ConceptExplainPanel({ paperId, isPaperReady, lang }: ConceptExplainPanelProps) {
   const { token } = useAuth();
   const [term, setTerm] = useState('');
   const [difficulty, setDifficulty] = useState<Difficulty>('intermediate');
@@ -32,7 +33,7 @@ export default function ConceptExplainPanel({ paperId, isPaperReady }: ConceptEx
     setError('');
 
     try {
-      const result = await explainConceptApi(token, paperId, term.trim(), difficulty);
+      const result = await explainConceptApi(token, paperId, term.trim(), difficulty, lang);
       setResults((current) => [result, ...current]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate an explanation');
@@ -130,7 +131,13 @@ export default function ConceptExplainPanel({ paperId, isPaperReady }: ConceptEx
                   {result.difficulty}
                 </span>
               </div>
-              <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">{result.explanation}</p>
+              <p
+                className={`mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700 ${
+                  result.language !== 'en' ? 'translated-text' : ''
+                }`}
+              >
+                {result.explanation}
+              </p>
               <CitationList citations={result.citations} idPrefix={`explain-${index}`} />
             </article>
           ))}

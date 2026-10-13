@@ -18,6 +18,9 @@ export type ChatMessage = {
   content: string;
   citations: Citation[] | null;
   created_at: string;
+  // Set only when the turn was sent with a `lang` and translation succeeded —
+  // citations still refer to (and were extracted from) the English `content`.
+  translated_content: string | null;
 };
 
 export type ChatSession = {
@@ -80,9 +83,15 @@ export async function sendChatMessageApi(
   message: string,
   sessionId: number | null,
   additionalPaperIds: number[] = [],
+  lang: string | null = null,
 ): Promise<ChatTurnResponse> {
   return requestJson<ChatTurnResponse>(`/papers/${paperId}/chat`, token, {
     method: 'POST',
-    body: JSON.stringify({ message, session_id: sessionId, additional_paper_ids: additionalPaperIds }),
+    body: JSON.stringify({
+      message,
+      session_id: sessionId,
+      additional_paper_ids: additionalPaperIds,
+      ...(lang ? { lang } : {}),
+    }),
   });
 }

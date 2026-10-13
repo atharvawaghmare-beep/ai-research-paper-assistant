@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     notification_check_interval_hours: int = 4
     notification_candidate_limit: int = 20
     notification_score_threshold: float = 0.35
+    # Phase 18: the current Ollama chat model's Hindi output had real quality
+    # problems in testing (e.g. "state-of-the-art" rendered as the nonsensical
+    # "राज्य-शीर्ष" instead of "अत्याधुनिक", plus "generator"/"generated"
+    # mistranslated) — a dedicated translation model does this correctly, so
+    # translation is intentionally NOT routed through `llm_service`.
+    translation_model_name: str = "facebook/nllb-200-distilled-600M"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

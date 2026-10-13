@@ -42,7 +42,12 @@ function isPdf(file: File) {
   return file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
 }
 
-function uploadPdf(file: File, token: string, onProgress: (progress: number) => void): Promise<UploadedPaperResponse> {
+function uploadPdf(
+  file: File,
+  token: string,
+  isUserAuthored: boolean,
+  onProgress: (progress: number) => void,
+): Promise<UploadedPaperResponse> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `${API_BASE_URL}/papers/upload`);
@@ -72,6 +77,7 @@ function uploadPdf(file: File, token: string, onProgress: (progress: number) => 
 
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('is_user_authored', String(isUserAuthored));
     xhr.send(formData);
   });
 }
@@ -83,6 +89,7 @@ export default function PdfUploadDropzone({ onUploaded }: PdfUploadDropzoneProps
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [isUserAuthored, setIsUserAuthored] = useState(false);
 
   const hasQueuedFiles = queue.some((item) => item.status === 'queued' || item.status === 'error');
 
@@ -146,7 +153,7 @@ export default function PdfUploadDropzone({ onUploaded }: PdfUploadDropzoneProps
       setQueue((current) => current.map((entry) => (entry.id === item.id ? { ...entry, status: 'uploading', progress: 0, message: undefined } : entry)));
 
       try {
-        const result = await uploadPdf(item.file, token, (progress) => {
+        const result = await uploadPdf(item.file, token, isUserAuthored, (progress) => {
           setQueue((current) => current.map((entry) => (entry.id === item.id ? { ...entry, progress } : entry)));
         });
 
@@ -185,6 +192,15 @@ export default function PdfUploadDropzone({ onUploaded }: PdfUploadDropzoneProps
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="space-y-1">
           <h3 className="text-lg font-semibold text-slate-900">Upload a paper</h3>
+          <label className="flex items-center gap-2 text-xs text-slate-500">
+            <input
+              type="checkbox"
+              checked={isUserAuthored}
+              onChange={(event) => setIsUserAuthored(event.target.checked)}
+              className="h-3.5 w-3.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+            />
+            This is my own paper/draft (enables format review feedback)
+          </label>
         </div>
 
         {queueSummary.total > 0 && (
